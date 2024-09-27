@@ -9,7 +9,7 @@ from PIL import Image
 
 from envs import WorldModelEnv
 from game.keymap import get_keymap_and_action_names
-from utils import make_video
+from src.utils_iris import make_video
 
 
 class Game:

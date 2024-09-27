@@ -11,7 +11,7 @@ from .kv_caching import KeysValues
 from .slicer import Embedder, Head
 from .tokenizer import Tokenizer
 from .transformer import Transformer, TransformerConfig
-from utils import init_weights, LossWithIntermediateLosses
+from src.utils_iris import init_weights, LossWithIntermediateLosses
 
 
 @dataclass
