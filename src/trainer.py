@@ -23,8 +23,16 @@ from models.actor_critic import ActorCritic
 from models.world_model import WorldModel
 from utils import configure_optimizer, EpisodeDirManager, set_seed
 
-from datasets.pusht_dset import PushTDataset
+from datasets.pusht_dset import PushTDataset, load_pusht_slice_train_val
 
+from datasets.traj_dset import split_traj_datasets
+
+import torchvision.transforms as transforms
+
+def resize_image(image_tensor): # resize the image to 64x64
+    resize_transform = transforms.Resize((64, 64))
+    resized_image = resize_transform(image_tensor)
+    return resized_image
 
 class Trainer:
     def __init__(self, cfg: DictConfig) -> None:
@@ -102,10 +110,12 @@ class Trainer:
         assert self.cfg.training.should or self.cfg.evaluation.should
         env = train_env if self.cfg.training.should else test_env
 
+        self.act_vocab_size = 2000 # define the action vocab size here for continuous actions
+        
         tokenizer = instantiate(cfg.tokenizer)
         world_model = WorldModel(
             obs_vocab_size=tokenizer.vocab_size,
-            act_vocab_size=env.num_actions,
+            act_vocab_size=self.act_vocab_size,
             config=instantiate(cfg.world_model),
         )
         actor_critic = ActorCritic(**cfg.actor_critic, act_vocab_size=env.num_actions)
@@ -137,8 +147,56 @@ class Trainer:
 
         if cfg.common.resume:
             self.load_checkpoint()
-
-        # self.all_train_set =
+            
+        
+        # load the dataset!!! change this if you need to run other datasets
+        all_dataset = PushTDataset(
+            data_path="/data/jeff/workspace/pusht_dataset",
+            transform=resize_image,
+        )
+        all_actions = all_dataset.get_all_actions()
+        all_actions = all_actions.view(-1)
+        self.max_action = all_actions.max()
+        self.min_action = all_actions.min()
+        
+        self.train_set, self.test_set = split_traj_datasets(all_dataset, 0.8)
+        
+        
+        for i in tqdm(range(len(self.train_set))):
+            obs, act, _, _ = self.train_set[i]
+            obs = obs["visual"]
+            ends = torch.zeros(obs.shape[0], dtype=torch.long)
+            ends[-1] = 1
+            act = (self.normalize_action(act) * (self.act_vocab_size-1)).long()
+            assert act.max() < self.act_vocab_size and act.min() >= 0, f"act: {act}"
+            cur_eposide = Episode(
+                observations=(obs * 255).to(torch.uint8),
+                actions=act,
+                rewards=torch.zeros(obs.shape[0]),
+                ends=ends,
+                mask_padding=torch.ones(obs.shape[0], dtype=torch.bool),
+            )
+            self.train_dataset.add_episode(cur_eposide)
+        
+        for i in tqdm(range(len(self.test_set))):
+            obs, act, _, _ = self.test_set[i]
+            obs = obs["visual"]
+            ends = torch.zeros(obs.shape[0], dtype=torch.long)
+            ends[-1] = 1
+            act = (self.normalize_action(act) * (self.act_vocab_size-1)).long()
+            assert act.max() < self.act_vocab_size and act.min() >= 0, f"act: {act}"
+            cur_eposide = Episode(
+                observations=(obs * 255).to(torch.uint8),
+                actions=act,
+                rewards=torch.zeros(obs.shape[0]),
+                ends=ends,
+                mask_padding=torch.ones(obs.shape[0], dtype=torch.bool),
+            )
+            self.test_dataset.add_episode(cur_eposide)
+        
+    
+    def normalize_action(self, act):
+            return (act - self.min_action) / (self.max_action - self.min_action)
 
     def run(self) -> None:
 
@@ -149,20 +207,15 @@ class Trainer:
             to_log = []
 
             if self.cfg.training.should:
-                if epoch <= self.cfg.collection.train.stop_after_epochs:
-                    to_log += self.train_collector.collect(
-                        self.agent, epoch, **self.cfg.collection.train.config
-                    )
+                # remove the data collection :>
                 to_log += self.train_agent(epoch)
 
             if self.cfg.evaluation.should and (epoch % self.cfg.evaluation.every == 0):
-                self.test_dataset.clear()
-                to_log += self.test_collector.collect(
-                    self.agent, epoch, **self.cfg.collection.test.config
-                )
+                # remove the data collection :>
                 to_log += self.eval_agent(epoch)
 
             if self.cfg.training.should:
+                print("saving checkpoint")
                 self.save_checkpoint(
                     epoch, save_agent_only=not self.cfg.common.do_checkpoint
                 )
@@ -203,17 +256,7 @@ class Trainer:
                 **cfg_world_model,
             )
         self.agent.world_model.eval()
-
-        if epoch > cfg_actor_critic.start_after_epochs:
-            metrics_actor_critic = self.train_component(
-                self.agent.actor_critic,
-                self.optimizer_actor_critic,
-                sequence_length=1 + self.cfg.training.actor_critic.burn_in,
-                sample_from_start=False,
-                tokenizer=self.agent.tokenizer,
-                world_model=self.agent.world_model,
-                **cfg_actor_critic,
-            )
+        # remove the actor critic training :>
         self.agent.actor_critic.eval()
 
         return [
@@ -282,22 +325,24 @@ class Trainer:
         cfg_actor_critic = self.cfg.evaluation.actor_critic
 
         if epoch > cfg_tokenizer.start_after_epochs:
+            print("Evaluating tokenizer")
             metrics_tokenizer = self.eval_component(
                 self.agent.tokenizer, cfg_tokenizer.batch_num_samples, sequence_length=1
             )
 
         if epoch > cfg_world_model.start_after_epochs:
+            print("Evaluating world model")
             metrics_world_model = self.eval_component(
                 self.agent.world_model,
                 cfg_world_model.batch_num_samples,
                 sequence_length=self.cfg.common.sequence_length,
                 tokenizer=self.agent.tokenizer,
             )
-
-        if epoch > cfg_actor_critic.start_after_epochs:
-            self.inspect_imagination(epoch)
+            
+        # remove the actor critic evaluation :>
 
         if cfg_tokenizer.save_reconstructions:
+            print("Saving reconstructions")
             batch = self._to_device(
                 self.test_dataset.sample_batch(
                     batch_num_samples=3, sequence_length=self.cfg.common.sequence_length

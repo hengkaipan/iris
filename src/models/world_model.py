@@ -30,10 +30,12 @@ class WorldModel(nn.Module):
         self.transformer = Transformer(config)
 
         all_but_last_obs_tokens_pattern = torch.ones(config.tokens_per_block)
-        all_but_last_obs_tokens_pattern[-2] = 0
+        all_but_last_obs_tokens_pattern[-3:-1] = 0
         act_tokens_pattern = torch.zeros(self.config.tokens_per_block)
-        act_tokens_pattern[-1] = 1
+        act_tokens_pattern[-2:] = 1 # this should be chanegd to the actual action tokens
         obs_tokens_pattern = 1 - act_tokens_pattern
+        ends_tokens_pattern = torch.zeros(self.config.tokens_per_block)
+        ends_tokens_pattern[-1] = 1
 
         self.pos_emb = nn.Embedding(config.max_tokens, config.embed_dim)
 
@@ -55,7 +57,7 @@ class WorldModel(nn.Module):
 
         self.head_rewards = Head(
             max_blocks=config.max_blocks,
-            block_mask=act_tokens_pattern,
+            block_mask=ends_tokens_pattern,
             head_module=nn.Sequential(
                 nn.Linear(config.embed_dim, config.embed_dim),
                 nn.ReLU(),
@@ -65,7 +67,7 @@ class WorldModel(nn.Module):
 
         self.head_ends = Head(
             max_blocks=config.max_blocks,
-            block_mask=act_tokens_pattern,
+            block_mask=ends_tokens_pattern,
             head_module=nn.Sequential(
                 nn.Linear(config.embed_dim, config.embed_dim),
                 nn.ReLU(),
@@ -99,8 +101,8 @@ class WorldModel(nn.Module):
         with torch.no_grad():
             obs_tokens = tokenizer.encode(batch['observations'], should_preprocess=True).tokens  # (BL, K)
 
-        act_tokens = rearrange(batch['actions'], 'b l -> b l 1') # here we assume the action dimension is 1
-        tokens = rearrange(torch.cat((obs_tokens, act_tokens), dim=2), 'b l k1 -> b (l k1)')  # (B, L(K+1))
+        act_tokens = batch['actions']  # (B, L, N_ACT)
+        tokens = rearrange(torch.cat((obs_tokens, act_tokens), dim=2), 'b l k1 -> b (l k1)')  # (B, L(K+2))
 
         outputs = self(tokens)
 
@@ -108,7 +110,7 @@ class WorldModel(nn.Module):
 
         logits_observations = rearrange(outputs.logits_observations[:, :-1], 'b t o -> (b t) o')
         loss_obs = F.cross_entropy(logits_observations, labels_observations)
-        loss_rewards = F.cross_entropy(rearrange(outputs.logits_rewards, 'b t e -> (b t) e'), labels_rewards)
+        loss_rewards = torch.tensor(0) # we don't need to compute the loss for rewards
         loss_ends = F.cross_entropy(rearrange(outputs.logits_ends, 'b t e -> (b t) e'), labels_ends)
 
         return LossWithIntermediateLosses(loss_obs=loss_obs, loss_rewards=loss_rewards, loss_ends=loss_ends)
