@@ -12,7 +12,7 @@ from agent import Agent
 from dataset import EpisodesDataset
 from envs import SingleProcessEnv, MultiProcessEnv
 from episode import Episode
-from src.utils_iris import EpisodeDirManager, RandomHeuristic
+from utils_iris import EpisodeDirManager, RandomHeuristic
 
 
 class Collector:

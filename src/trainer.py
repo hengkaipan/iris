@@ -21,7 +21,7 @@ from episode import Episode
 from make_reconstructions import make_reconstructions_from_batch
 from models.actor_critic import ActorCritic
 from models.world_model import WorldModel
-from src.utils_iris import configure_optimizer, EpisodeDirManager, set_seed
+from utils_iris import configure_optimizer, EpisodeDirManager, set_seed
 
 from datasets.pusht_dset import PushTDataset, load_pusht_slice_train_val
 

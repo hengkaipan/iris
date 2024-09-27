@@ -8,7 +8,7 @@ from torch.utils.data import Dataset, DataLoader
 from hydra import compose, initialize
 from omegaconf import OmegaConf
 from .CLEVRER.temporal_reasoning.data import VisualCLEVRDataset
-from src.utils_iris import pil_loader
+from utils_iris import pil_loader
 # from utils import dict_to_namespace
 
 class CLEVRERWrapperDataset(Dataset):
