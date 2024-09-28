@@ -5,6 +5,30 @@ defaults:
   - actor_critic: default
   - env: default
   - datasets: default
+  - override hydra/launcher: submitit_slurm
+
+ckpt_base_path: /checkpoint/amaia/video/gzhou/exps/iris
+
+hydra:
+  run:
+    dir: ${ckpt_base_path}/outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: ${ckpt_base_path}/outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num}
+  launcher:
+    submitit_folder: ${hydra.sweep.dir}/.submitit/%j
+    nodes: 1
+    tasks_per_node: 1
+    cpus_per_task: 8
+    mem_gb: 128
+    gres: "gpu:h100:1"
+    qos: "explore"
+    # constraint: "volta32gb"
+    timeout_min: 4320
+    # setup: ["export DEBUGVAR=$(scontrol show hostnames $SLURM_JOB_NODELIST)",
+    #         export MASTER_ADDR="$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n 1)",
+    #         "export MASTER_PORT=$(for port in $(shuf -i 30000-65500 -n 20); do if [[ $(netstat -tupln 2>&1 | grep $port | wc -l) -eq 0 ]] ; then echo $port; break; fi; done;)",]
+
 
 wandb:
   mode: online

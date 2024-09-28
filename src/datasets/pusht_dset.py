@@ -14,17 +14,35 @@ from typing import Optional, Callable, Any
 decord.bridge.set_bridge("torch")
 
 # mean and var after dividing by 100, without considering the filling 0 actions
+# ACTION_MEAN = torch.tensor([-0.0087, 0.0068])
+# ACTION_STD = torch.tensor([0.2019, 0.2002])
+
+# STATE_MEAN = torch.tensor([236.6155, 264.5674, 255.1307, 266.3721, 1.9584])
+# STATE_STD = torch.tensor([101.1202, 87.0112, 52.7054, 57.4971, 1.7556])
+
+# PROPRIO_MEAN = torch.tensor([236.6155, 264.5674])
+# PROPRIO_STD = torch.tensor([101.1202, 87.0112])
+
+# calculated from 185 train trajs
+# ACTION_MEAN = torch.tensor([-0.007838 ,  0.0068466])
+# ACTION_STD = torch.tensor([0.20135775, 0.1994587])
+
+# STATE_MEAN = torch.tensor([228.79599  , 292.14444  , 246.62141  , 271.63977  ,   1.8079071, -2.93032027,  2.54307914])
+# STATE_STD = torch.tensor([101.7689   ,  97.10681  ,  64.57505  ,  66.53813  ,   1.7803417, 74.84556075, 74.14009094])
+
+# PROPRIO_MEAN = torch.tensor([228.79599  , 292.14444, -2.93032027,  2.54307914])
+# PROPRIO_STD = torch.tensor([101.7689   ,  97.10681, 74.84556075, 74.14009094])
+
+# note: velocity stats are calculated separately! other stats are unchanged due to compatibility with prev models
 ACTION_MEAN = torch.tensor([-0.0087, 0.0068])
 ACTION_STD = torch.tensor([0.2019, 0.2002])
 
-STATE_MEAN = torch.tensor([236.6155, 264.5674, 255.1307, 266.3721, 1.9584])
-STATE_STD = torch.tensor([101.1202, 87.0112, 52.7054, 57.4971, 1.7556])
+STATE_MEAN = torch.tensor([236.6155, 264.5674, 255.1307, 266.3721, 1.9584, -2.93032027,  2.54307914])
+STATE_STD = torch.tensor([101.1202, 87.0112, 52.7054, 57.4971, 1.7556, 74.84556075, 74.14009094])
 
-PROPRIO_MEAN = torch.tensor([236.6155, 264.5674])
-PROPRIO_STD = torch.tensor([101.1202, 87.0112])
+PROPRIO_MEAN = torch.tensor([236.6155, 264.5674, -2.93032027,  2.54307914])
+PROPRIO_STD = torch.tensor([101.1202, 87.0112, 74.84556075, 74.14009094])
 
-
-# 206 trajs in total
 class PushTDataset(TrajDataset):
     def __init__(
         self,
@@ -36,7 +54,7 @@ class PushTDataset(TrajDataset):
         action_scale=100.0,
         state_based: bool = False,
         with_velocity: bool = True,
-    ):
+    ):  
         self.data_path = Path(data_path)
         self.transform = transform
         self.relative = relative
@@ -50,11 +68,6 @@ class PushTDataset(TrajDataset):
         self.actions = self.actions.float()
         self.actions = self.actions / action_scale  # scaled back up in env
 
-        self.with_velocity = with_velocity
-        if with_velocity:
-            with open(self.data_path / "velocities.pkl", "rb") as f:
-                self.velocities = torch.from_numpy(pickle.load(f))
-
         with open(self.data_path / "seq_lengths.pkl", "rb") as f:
             self.seq_lengths = pickle.load(f)
 
@@ -67,19 +80,27 @@ class PushTDataset(TrajDataset):
         self.states = self.states[:n]
         self.actions = self.actions[:n]
         self.seq_lengths = self.seq_lengths[:n]
-        self.action_dim = self.actions.shape[-1]
-        self.state_dim = self.states.shape[-1]
 
         self.proprios = self.states[..., :2].clone()  # first 2 dim of states is proprio
+
+        self.with_velocity = with_velocity # TODO: add vel in proprios
+        if with_velocity:
+            with open(self.data_path / "velocities.pkl", "rb") as f:
+                self.velocities = torch.from_numpy(pickle.load(f))
+                self.velocities = self.velocities[:n].float()
+            self.states = torch.cat([self.states, self.velocities], dim=-1)
+            self.proprios = torch.cat([self.proprios, self.velocities], dim=-1)
+        self.action_dim = self.actions.shape[-1]
+        self.state_dim = self.states.shape[-1]
         self.proprio_dim = self.proprios.shape[-1]
 
         if normalize_action:
             self.action_mean = ACTION_MEAN
             self.action_std = ACTION_STD
-            self.state_mean = STATE_MEAN  # if normalize_actions and state_based, assume normalize states as well
-            self.state_std = STATE_STD
-            self.proprio_mean = PROPRIO_MEAN
-            self.proprio_std = PROPRIO_STD
+            self.state_mean = STATE_MEAN[:self.state_dim]  # if normalize_actions and state_based, assume normalize states as well
+            self.state_std = STATE_STD[:self.state_dim]
+            self.proprio_mean = PROPRIO_MEAN[:self.proprio_dim]
+            self.proprio_std = PROPRIO_STD[:self.proprio_dim]
         else:
             self.action_mean = torch.zeros(self.action_dim)
             self.action_std = torch.ones(self.action_dim)
@@ -108,9 +129,6 @@ class PushTDataset(TrajDataset):
         reader = VideoReader(str(vid_dir / f"episode_{idx:03d}.mp4"), num_threads=1)
         act = self.actions[idx, frames]
         state = self.states[idx, frames]
-        if self.with_velocity:
-            vel = self.velocities[idx, frames]
-            state = torch.cat([state, vel], dim=-1)
         proprio = self.proprios[idx, frames]
         mask = torch.ones(len(act)).bool()
         if not self.state_based:
@@ -154,7 +172,7 @@ def load_pusht_slice_train_val(
     train_dset = PushTDataset(
         n_rollout=n_rollout,
         transform=transform,
-        data_path=data_path,
+        data_path=data_path + "/train",
         normalize_action=normalize_action,
         state_based=state_based,
         with_velocity=with_velocity,
@@ -162,7 +180,7 @@ def load_pusht_slice_train_val(
     val_dset = PushTDataset(
         n_rollout=n_rollout,
         transform=transform,
-        data_path=data_path,
+        data_path=data_path + "/val",
         normalize_action=normalize_action,
         state_based=state_based,
         with_velocity=with_velocity,

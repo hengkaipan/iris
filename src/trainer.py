@@ -151,15 +151,16 @@ class Trainer:
         
         # load the dataset!!! change this if you need to run other datasets
         all_dataset = PushTDataset(
-            data_path="/data/jeff/workspace/pusht_dataset",
+            data_path="/home/gaoyuezhou/datasets/pusht_noise/train",
             transform=resize_image,
+            # n_rollout=10,
         )
         all_actions = all_dataset.get_all_actions()
         all_actions = all_actions.view(-1)
         self.max_action = all_actions.max()
         self.min_action = all_actions.min()
         
-        self.train_set, self.test_set = split_traj_datasets(all_dataset, 0.8)
+        self.train_set, self.test_set = split_traj_datasets(all_dataset, 0.9)
         
         
         for i in tqdm(range(len(self.train_set))):
