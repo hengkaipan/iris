@@ -24,6 +24,8 @@ from models.world_model import WorldModel
 from utils_iris import configure_optimizer, EpisodeDirManager, set_seed
 
 from datasets.pusht_dset import PushTDataset, load_pusht_slice_train_val
+from datasets.point_maze_dset import PointMazeDataset, load_point_maze_slice_train_val
+from datasets.wall_dset import WallDataset, load_wall_slice_train_val
 
 from datasets.traj_dset import split_traj_datasets
 
@@ -151,10 +153,24 @@ class Trainer:
         
         # load the dataset!!! change this if you need to run other datasets
         all_dataset = PushTDataset(
-            data_path="/home/gaoyuezhou/datasets/pusht_noise/train",
+            data_path="/home/gaoyuezhou/datasets/pusht_noise_rotated/train",
+            # data_path="/checkpoint/amaia/video/gzhou/wm_datasets/pushany_2000/train",
             transform=resize_image,
             # n_rollout=10,
         )
+        # all_dataset = PointMazeDataset(
+        #     data_path="/home/gaoyuezhou/datasets/point_maze_dataset_random",
+        #     transform=resize_image,
+        #     # n_rollout=10,
+        # )
+        # all_dataset = WallDataset(
+        #     # data_path="/checkpoint/amaia/video/gzhou/wm_datasets/wall_single_tst",
+        #     data_path="/checkpoint/amaia/video/gzhou/wm_datasets/wall_random/train",
+        #     transform=resize_image,
+        #     # n_rollout=10,
+        # )
+
+
         all_actions = all_dataset.get_all_actions()
         all_actions = all_actions.view(-1)
         self.max_action = all_actions.max()
