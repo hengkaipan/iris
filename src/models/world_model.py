@@ -23,16 +23,18 @@ class WorldModelOutput:
 
 
 class WorldModel(nn.Module):
-    def __init__(self, obs_vocab_size: int, act_vocab_size: int, config: TransformerConfig) -> None:
+    def __init__(self, obs_vocab_size: int, act_vocab_size: int, config: TransformerConfig, action_dim = 2) -> None:
         super().__init__()
         self.obs_vocab_size, self.act_vocab_size = obs_vocab_size, act_vocab_size
+        self.action_dim = action_dim
         self.config = config
         self.transformer = Transformer(config)
 
         all_but_last_obs_tokens_pattern = torch.ones(config.tokens_per_block)
-        all_but_last_obs_tokens_pattern[-3:-1] = 0
+        action_start_idx = -1 - action_dim
+        all_but_last_obs_tokens_pattern[action_start_idx:-1] = 0
         act_tokens_pattern = torch.zeros(self.config.tokens_per_block)
-        act_tokens_pattern[-2:] = 1 # this should be chanegd to the actual action tokens
+        act_tokens_pattern[-action_dim:] = 1 # this should be chanegd to the actual action tokens
         obs_tokens_pattern = 1 - act_tokens_pattern
         ends_tokens_pattern = torch.zeros(self.config.tokens_per_block)
         ends_tokens_pattern[-1] = 1

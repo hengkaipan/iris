@@ -92,3 +92,5 @@ evaluation:
     num_episodes_to_save: ${training.actor_critic.batch_num_samples}
     horizon: ${training.actor_critic.imagine_horizon}
     start_after_epochs: ${training.actor_critic.start_after_epochs}
+
+action_dim: 4

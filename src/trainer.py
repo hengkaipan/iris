@@ -24,6 +24,7 @@ from models.world_model import WorldModel
 from utils_iris import configure_optimizer, EpisodeDirManager, set_seed
 
 from datasets.pusht_dset import PushTDataset, load_pusht_slice_train_val
+from datasets.deformable_env_dset import DeformDataset
 
 from datasets.traj_dset import split_traj_datasets
 
@@ -117,6 +118,7 @@ class Trainer:
             obs_vocab_size=tokenizer.vocab_size,
             act_vocab_size=self.act_vocab_size,
             config=instantiate(cfg.world_model),
+            action_dim = cfg.action_dim,
         )
         actor_critic = ActorCritic(**cfg.actor_critic, act_vocab_size=env.num_actions)
         self.agent = Agent(tokenizer, world_model, actor_critic).to(self.device)
@@ -150,10 +152,16 @@ class Trainer:
             
         
         # load the dataset!!! change this if you need to run other datasets
-        all_dataset = PushTDataset(
-            data_path="/data/jeff/workspace/pusht_dataset",
+        all_dataset = DeformDataset(
+            data_path="/home/gary/AdaptiGraph/sim_data_repo",
+            object_name='granular',
             transform=resize_image,
         )
+        
+        # all_dataset = PushTDataset(
+        #     data_path="/data/jeff/workspace/pusht_dataset",
+        #     transform=resize_image,
+        # )
         all_actions = all_dataset.get_all_actions()
         all_actions = all_actions.view(-1)
         self.max_action = all_actions.max()
