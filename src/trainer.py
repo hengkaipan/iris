@@ -152,16 +152,17 @@ class Trainer:
             
         
         # load the dataset!!! change this if you need to run other datasets
-        all_dataset = DeformDataset(
-            data_path="/home/gary/AdaptiGraph/sim_data_repo",
-            object_name='granular',
-            transform=resize_image,
-        )
-        
-        # all_dataset = PushTDataset(
-        #     data_path="/data/jeff/workspace/pusht_dataset",
+        # all_dataset = DeformDataset(
+        #     data_path="/home/gary/AdaptiGraph/sim_data_repo",
+        #     object_name='granular',
         #     transform=resize_image,
         # )
+        
+        all_dataset = PushTDataset(
+            data_path="/home/gaoyuezhou/datasets/pusht_noise/train",
+            transform=resize_image,
+            n_rollout=10
+        )
         all_actions = all_dataset.get_all_actions()
         all_actions = all_actions.view(-1)
         self.max_action = all_actions.max()
